@@ -54,24 +54,27 @@ database.connectToServer((err) => {
         const messages = db.collection("messages")
         console.log("DatabaseUserSessionStart")
 
-        messages.find({}).toArray((err, results) => {
-            if (err) throw err
-            client.emit("previous messages", results)
-            console.log("SendPreviousMessages")
+        client.on("chat connect", () => {
+    
+            messages.find({}).toArray((err, results) => {
+                if (err) throw err
+                client.emit("previousMessages", results)
+                console.log("SendPreviousMessages")
+            })
         })
 
-        client.on('chat message', msg => {
-
-            messages.insertOne({
+        client.on('chatMessage', msg => {
+            let newMessage = {
                 user: "Anon",
                 message: msg
-            }, (err, result) => {
+            }
+            messages.insertOne(newMessage, (err, result) => {
                 if (err) throw err
 
                 console.log("UserSendMessage")
                 console.log("SaveMessageDB")
 
-                io.emit("chat message", msg)
+                io.emit("chatMessage", newMessage)
                 console.log("MessageBroadcast")
             })
             
