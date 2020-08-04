@@ -2,11 +2,12 @@ const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
 const session = require('express-session');
-const MongoStore = require('connect-mongo')(session);
 const passport = require('passport');
+const MongoStore = require('connect-mongo')(session);
 const app = express()
 const http = require("http").createServer(app)
 const io = require('socket.io')(http)
+const passportSocketIo = require("passport.socketio");
 const database = require("./database.js")
 
 require('dotenv').config()
@@ -25,15 +26,29 @@ var options = {
     url: 'mongodb://localhost/chat'
 };
 
-app.use(session({
+const store = new MongoStore(options)
+
+const sessionMiddleware = session({
+    key: 'connect.sid',
     secret: process.env.SESSION_SECRET,
-    store: new MongoStore(options),
-    saveUninitialized: false
+    store: store,
+    saveUninitialized: false,
+    resave: false
+})
+
+app.use(sessionMiddleware);
+
+io.use(passportSocketIo.authorize({       
+    key: 'connect.sid',
+    secret: process.env.SESSION_SECRET,
+    store: store
 }));
 
 app.use(passport.initialize());
 app.use(passport.session());
 passportMysql(passport);
+
+
 
 app.use('/authentication', authenticationRoutes);
 
@@ -54,8 +69,7 @@ database.connectToServer((err) => {
         const messages = db.collection("messages")
         console.log("DatabaseUserSessionStart")
 
-        client.on("chat connect", () => {
-    
+        client.on("chatConnect", () => {
             messages.find({}).toArray((err, results) => {
                 if (err) throw err
                 client.emit("previousMessages", results)
@@ -65,7 +79,7 @@ database.connectToServer((err) => {
 
         client.on('chatMessage', msg => {
             let newMessage = {
-                user: "Anon",
+                user: client.request.user.email,
                 message: msg
             }
             messages.insertOne(newMessage, (err, result) => {

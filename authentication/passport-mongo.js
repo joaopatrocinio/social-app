@@ -13,13 +13,10 @@ module.exports = function (passport) {
     passport.deserializeUser(function (id, done) {
         const db = database.getDb()
         const users = db.collection("users")
-        console.log(id)
-        users.findOne(ObjectId(id), (err, results) => {
+        users.findOne(ObjectId(id), (err, result) => {
             if (err) done(err)
-            console.log(results)
-            delete results._id;
-            delete results.password;
-            done(null, results);
+            delete result.password;
+            done(null, result);
         })
     });
 
