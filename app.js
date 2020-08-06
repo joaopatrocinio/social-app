@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
+const cookieParser = require("cookie-parser")
 const session = require('express-session');
 const passport = require('passport');
 const MongoStore = require('connect-mongo')(session);
@@ -19,7 +20,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 const port = process.env.PORT
 
-const passportMysql = require('./authentication/passport-mongo');
+const passportMongo = require('./authentication/passport-mongo');
 const authenticationRoutes = require('./authentication/routes');
 
 var options = {
@@ -29,26 +30,38 @@ var options = {
 const store = new MongoStore(options)
 
 const sessionMiddleware = session({
-    key: 'connect.sid',
+    key: 'session_id',
     secret: process.env.SESSION_SECRET,
     store: store,
-    saveUninitialized: false,
+    saveUninitialized: true,
     resave: false
 })
 
 app.use(sessionMiddleware);
 
-io.use(passportSocketIo.authorize({       
-    key: 'connect.sid',
+io.use(passportSocketIo.authorize({
+    cookieParser: cookieParser,    
+    key: 'session_id',
     secret: process.env.SESSION_SECRET,
-    store: store
+    store: store,
+    success: onAuthorizeSuccess,
+    fail: onAuthorizeFail
 }));
+
+function onAuthorizeSuccess(data, accept){
+    console.log('PassportSocketIOConnected');
+    accept();
+}
+
+function onAuthorizeFail(data, message, error, accept){
+    if(error) throw new Error(message);
+    console.log('PassportSocketIOError:', message);
+    if(error) accept(new Error(message));
+}
 
 app.use(passport.initialize());
 app.use(passport.session());
-passportMysql(passport);
-
-
+passportMongo(passport);
 
 app.use('/authentication', authenticationRoutes);
 
@@ -70,6 +83,7 @@ database.connectToServer((err) => {
         console.log("DatabaseUserSessionStart")
 
         client.on("chatConnect", () => {
+            console.log("ChatConnect")
             messages.find({}).toArray((err, results) => {
                 if (err) throw err
                 client.emit("previousMessages", results)
@@ -79,8 +93,8 @@ database.connectToServer((err) => {
 
         client.on('chatMessage', msg => {
             let newMessage = {
-                user: client.request.user.email,
-                message: msg
+                user: client.request.user.email || "Anon",
+                message: msg,
             }
             messages.insertOne(newMessage, (err, result) => {
                 if (err) throw err
@@ -91,7 +105,6 @@ database.connectToServer((err) => {
                 io.emit("chatMessage", newMessage)
                 console.log("MessageBroadcast")
             })
-            
         })
 
         io.on('disconnect', (reason) => {
