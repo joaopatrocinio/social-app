@@ -77,18 +77,14 @@ database.connectToServer((err) => {
     io.on('connection', client => {
 
         console.log("UserConnect")
-        
         const db = database.getDb()
         const messages = db.collection("messages")
         console.log("DatabaseUserSessionStart")
 
-        client.on("chatConnect", () => {
-            console.log("ChatConnect")
-            messages.find({}).toArray((err, results) => {
-                if (err) throw err
-                client.emit("previousMessages", results)
-                console.log("SendPreviousMessages")
-            })
+        messages.find({}).toArray((err, results) => {
+            if (err) throw err
+            client.emit("previousMessages", results)
+            console.log("SendPreviousMessages")
         })
 
         client.on('chatMessage', msg => {
@@ -107,9 +103,12 @@ database.connectToServer((err) => {
             })
         })
 
-        io.on('disconnect', (reason) => {
+        client.on("leave", () => {
+            client.disconnect();
+        })
+
+        client.on('disconnect', (reason) => {
             console.log("UserDisconnect")
-            db.close()
         });
     })
 })
