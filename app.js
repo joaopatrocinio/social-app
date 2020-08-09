@@ -64,6 +64,7 @@ app.use(passport.session());
 passportMongo(passport);
 
 app.use('/authentication', authenticationRoutes);
+app.use('/people', require("./routes/people"));
 
 app.get("/", (req, res) => {
     res.send("Server is running.")
@@ -76,39 +77,69 @@ database.connectToServer((err) => {
     http.listen(port, () => console.log(`HTTPServerStart`))
     io.on('connection', client => {
 
-        console.log("UserConnect")
-        const db = database.getDb()
-        const messages = db.collection("messages")
-        console.log("DatabaseUserSessionStart")
-
-        messages.find({}).toArray((err, results) => {
-            if (err) throw err
-            client.emit("previousMessages", results)
-            console.log("SendPreviousMessages")
-        })
-
-        client.on('chatMessage', msg => {
-            let newMessage = {
-                user: client.request.user.email || "Anon",
-                message: msg,
+        client.on("gameConnect", () => {
+            console.log("GameConnect")
+            client.join("gameRoom")
+            const db = database.getDb()
+            const game = db.collection("game")
+            
+            const gameStore = {
+                user: client.request.user._id,
+                x: 10,
+                y: 10
             }
-            messages.insertOne(newMessage, (err, result) => {
-                if (err) throw err
 
-                console.log("UserSendMessage")
-                console.log("SaveMessageDB")
-
-                io.emit("chatMessage", newMessage)
-                console.log("MessageBroadcast")
+            game.insertOne(gameStore, (err, result) => {
+                if (err) throw err;
+                io.to("gameRoom").emit("position", gameStore)
             })
+            
+            client.on("leave", () => {
+                client.disconnect();
+            })
+    
+            client.on('disconnect', (reason) => {
+                game.deleteOne(gameStore);
+                console.log("UserDisconnect")
+            });
         })
 
-        client.on("leave", () => {
-            client.disconnect();
+        client.on("chatConnect", () => {
+            console.log("ChatConnect")
+            client.join("chatRoom")
+            const db = database.getDb()
+            const messages = db.collection("messages")
+    
+            messages.find({}).toArray((err, results) => {
+                if (err) throw err
+                client.emit("previousMessages", results)
+                console.log("SendPreviousMessages")
+            })
+    
+            client.on('chatMessage', msg => {
+                let newMessage = {
+                    user: client.request.user.email || "Anon",
+                    message: msg,
+                }
+                messages.insertOne(newMessage, (err, result) => {
+                    if (err) throw err
+    
+                    console.log("UserSendMessage")
+                    console.log("SaveMessageDB")
+    
+                    io.to("chatRoom").emit("chatMessage", newMessage)
+                    console.log("MessageBroadcast")
+                })
+            })
+    
+            client.on("leave", () => {
+                client.disconnect();
+            })
+    
+            client.on('disconnect', (reason) => {
+                console.log("UserDisconnect")
+            });
         })
 
-        client.on('disconnect', (reason) => {
-            console.log("UserDisconnect")
-        });
     })
 })
